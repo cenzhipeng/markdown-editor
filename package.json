@@ -1,0 +1,24 @@
+{
+  "name": "markdown-editor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cenzhipeng/markdown-editor.git"
+  },
+  "author": "cenzhipeng",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cenzhipeng/markdown-editor/issues"
+  },
+  "homepage": "https://github.com/cenzhipeng/markdown-editor#readme",
+  "dependencies": {
+    "electron": "^8.0.1",
+    "marked": "^0.8.0"
+  }
+}

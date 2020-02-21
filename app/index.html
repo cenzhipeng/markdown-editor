@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>markdown-editor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="container">
+<section class="controls">
+    <button id="new-file">新建</button>
+    <button id="open-file">打开</button>
+    <button id="save-markdown" disabled>保存</button>
+    <button id="revert">撤回</button>
+    <button id="save-html">保存为HTML</button>
+    <button id="show-file">展示</button>
+    <button id="open-in-default">默认打开应用</button>
+</section>
+<section class="content">
+    <label for="markdown" hidden>Markdown 内容</label>
+    <textarea class="raw-markdown" id="markdown"></textarea>
+    <div class="rendered-html" id="html"></div>
+</section>
+</body>
+<script>
+    require('./render');
+</script>
+</html>
