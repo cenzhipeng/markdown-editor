@@ -1,10 +1,8 @@
 const marked = require('marked'); // markdown 编译
-const markdownContextMenuTemplate = require('./markdown-context-menu');
+const markdownContextMenu = require('./markdown-context-menu');
 const frontMatter = require('front-matter'); // 获取 markdown 头部的元数据
 const path = require('path');
-const {remote, ipcRenderer} = require('electron');
-// markdown上下文菜单
-const markdownContextMenu = remote.Menu.buildFromTemplate(markdownContextMenuTemplate);
+const {remote, ipcRenderer, shell} = require('electron');
 // 当前窗口
 const currentWindow = remote.getCurrentWindow();
 const app = remote.app;
@@ -92,16 +90,37 @@ function renderFile(file, content) {
     originalContent = content;
     markdownView.value = content;
     renderMarkdown2Html(content);
+    showFileButton.disabled = false;
+    openInDefaultButton.disabled = false;
     updateUserInterface(false);
+    ipcRenderer.send('setApplicationMenu');
 }
+
+/**
+ * 以下取消默认的拖拽事件
+ */
+document.addEventListener('dragstart', e => {
+    e.preventDefault();
+});
+document.addEventListener('dragover', e => {
+    e.preventDefault();
+});
+document.addEventListener('dragleave', e => {
+    e.preventDefault();
+});
+document.addEventListener('drop', e => {
+    e.preventDefault();
+});
 
 /**
  * 这个事件表示当在这个元素上右键点击的时候，弹出上下文菜单
  */
 markdownView.addEventListener('contextmenu', e => {
     e.preventDefault();
+    // markdown上下文菜单
+    const menu = remote.Menu.buildFromTemplate(markdownContextMenu(!!filePath));
     //弹出上下文菜单
-    markdownContextMenu.popup();
+    menu.popup();
 });
 
 /**
@@ -166,32 +185,54 @@ openFileButton.addEventListener('click', e => {
     e.preventDefault();
     ipcRenderer.send('select-file');
 });
-// 菜单栏传过来事件
-currentWindow.on('select-file', () => ipcRenderer.send('select-file'));
+
 
 newFileButton.addEventListener('click', e => {
     e.preventDefault();
     ipcRenderer.send('create-window');
 });
-currentWindow.on('create-window', () => ipcRenderer.send('create-window'));
 
 saveHtmlButton.addEventListener('click', e => {
     e.preventDefault();
     ipcRenderer.send('save-html', htmlView.innerHTML);
 });
-currentWindow.on('save-html', () => ipcRenderer.send('save-html'));
 
 saveMarkdownButton.addEventListener('click', e => {
     e.preventDefault();
     ipcRenderer.send('save-markdown', markdownView.value);
 });
-currentWindow.on('save-markdown', () => ipcRenderer.send('save-markdown'));
 
 revertButton.addEventListener('click', e => {
     e.preventDefault();
     markdownView.value = originalContent;
     renderMarkdown2Html(originalContent);
     updateUserInterface();
+});
+
+showFileButton.addEventListener('click', e => {
+    e.preventDefault();
+    ipcRenderer.emit('show-in-finder');
+});
+
+openInDefaultButton.addEventListener('click', e => {
+    e.preventDefault();
+    ipcRenderer.emit('open-in-default');
+});
+
+ipcRenderer.on('open-in-default', e => {
+    if (!filePath) {
+        return alert('文件尚未保存');
+    }
+    // 使用注册的默认的应用打开这个文件路径 比如我本机打开markdown的默认应用是typora
+    shell.openItem(filePath);
+});
+
+ipcRenderer.on('show-in-finder', e => {
+    if (!filePath) {
+        return alert('文件尚未保存');
+    }
+    // macos 使用finer打开路径 windows 使用文件浏览器
+    shell.showItemInFolder(filePath);
 });
 
 /**
@@ -224,25 +265,29 @@ ipcRenderer.on('file-opened', (event, currentPath, content) => {
  * 该事件表示当前窗口打开的文件，被其它程序修改了
  */
 ipcRenderer.on('file-changed', (event, currentPath) => {
-    if (fileChangeBox === false) {
-        fileChangeBox = true; // 不让新的对话框打开
-        remote.dialog.showMessageBox(currentWindow, {
-            type: 'warning',
-            title: '是否重新加载？',
-            message: "文档已被其它程序修改，是否重新加载",
-            buttons: [
-                '是',
-                '否'
-            ],
-            defaultId: 0, // id 为 0 表示上面的 buttons 数组取第 0 个，将会作为回车键的默认选项
-            cancelId: 1, // 如果用户关闭消息框，使用 buttons 数组的下标为 1 的选项作为返回值
-        }).then(result => {
-            fileChangeBox = false; // 此时可以再次触发文件更改事件
-            if (result.response !== 1) {
-                // 告诉主进程读取这个文件
-                ipcRenderer.send('file-read', currentPath);
-            }
-        })
+    if (currentWindow.isDocumentEdited()) {
+        if (fileChangeBox === false) {
+            fileChangeBox = true; // 不让新的对话框打开
+            remote.dialog.showMessageBox(currentWindow, {
+                type: 'warning',
+                title: '是否重新加载？',
+                message: "文档已被其它程序修改，是否重新加载",
+                buttons: [
+                    '是',
+                    '否'
+                ],
+                defaultId: 0, // id 为 0 表示上面的 buttons 数组取第 0 个，将会作为回车键的默认选项
+                cancelId: 1, // 如果用户关闭消息框，使用 buttons 数组的下标为 1 的选项作为返回值
+            }).then(result => {
+                fileChangeBox = false; // 此时可以再次触发文件更改事件
+                if (result.response !== 1) {
+                    // 告诉主进程读取这个文件
+                    ipcRenderer.send('file-read', currentPath);
+                }
+            })
+        }
+    } else {
+        ipcRenderer.send('file-read', currentPath);
     }
 });
 
@@ -253,19 +298,13 @@ ipcRenderer.on('file-read-out', (e, targetPath, content) => {
     renderFile(targetPath, content);
 });
 
-/**
- * 以下取消默认的拖拽事件
- */
-document.addEventListener('dragstart', e => {
-    e.preventDefault();
-});
-document.addEventListener('dragover', e => {
-    e.preventDefault();
-});
-document.addEventListener('dragleave', e => {
-    e.preventDefault();
-});
-document.addEventListener('drop', e => {
-    e.preventDefault();
+ipcRenderer.on('invoke-save-markdown', e => {
+    ipcRenderer.send('save-markdown', markdownView.value);
 });
 
+ipcRenderer.on('invoke-save-html', e => {
+    ipcRenderer.send('save-html', htmlView.innerHTML);
+});
+
+// 收到的重发事件，将接收到的事件重新转发，主要是为了复用一些功能
+ipcRenderer.on('retransmission', (e, eventName, ...args) => ipcRenderer.send(eventName, ...args));

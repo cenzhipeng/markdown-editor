@@ -1,5 +1,5 @@
-const {app, BrowserWindow, dialog, ipcMain, Menu} = require('electron');
-const applicationMenu = require('./application-menu');
+const {app, BrowserWindow, dialog, ipcMain} = require('electron');
+const setApplicationMenu = require('./application-menu');
 const fs = require('fs');
 const watch = require('node-watch');
 // 所有的窗口保存在这里
@@ -9,7 +9,7 @@ const openFiles = new Map();
 
 app.on('ready', () => {
     // 设置应用的菜单栏，一旦使用了自定义菜单，原先默认的菜单和快捷键就统统都不起作用了
-    Menu.setApplicationMenu(applicationMenu);
+    setApplicationMenu();
     createWindow();
 });
 
@@ -53,6 +53,14 @@ app.on('will-finish-launching', () => {
     })
 });
 
+function intervalSetMenu() {
+    setTimeout(() => {
+        setApplicationMenu();
+        console.log(1);
+        intervalSetMenu();
+    }, 1000);
+}
+
 function createWindow() {
     let newWindow = new BrowserWindow({
         webPreferences: {
@@ -82,18 +90,21 @@ function createWindow() {
                     newWindow.destroy(); // 因为前面调用了 e.preventDefault(); 所以这里要手动关闭窗口
                     openWindows.delete(newWindow); //关闭窗口后，将其删除，防止泄露
                     stopWatchingFile(newWindow); // 窗口关闭后它的文件监视器也应该关闭
+                    setApplicationMenu();
                     newWindow = null;
                 }
             });
         } else {
             openWindows.delete(newWindow); //关闭窗口后，将其删除，防止泄露
             stopWatchingFile(newWindow); // 窗口关闭后它的文件监视器也应该关闭
+            setApplicationMenu();
             newWindow = null;
         }
     });
     newWindow.once('ready-to-show', () => {
         newWindow.show(); // 加载完成后显示
     });
+    newWindow.on('focus', setApplicationMenu);
     return newWindow;
 }
 
@@ -124,7 +135,7 @@ function openFile(targetWindow, targetPath) {
         targetWindow.webContents.send('file-read-out', targetPath, data.toString());
         startWatchingFile(targetWindow, targetPath);
         app.addRecentDocument(targetPath); // 将这个文件加到最近文件，可以在 dock 栏看到最近文件
-        // 仅 macos 有用，添加了这个之后，我们将会在标题栏看到文件图标，可以拖拽图标发送给其它程序（方便的一批）
+        // UI效果仅 macos 有用，添加了这个之后，我们将会在标题栏看到文件图标，可以拖拽图标发送给其它程序（方便的一批）
         targetWindow.setRepresentedFilename(targetPath);
     });
 }
@@ -138,6 +149,8 @@ ipcMain.on('file-read', (e, targetPath) => {
     openFile(targetWindow, targetPath);
 });
 
+ipcMain.on('setApplicationMenu', setApplicationMenu);
+
 /**
  * 收到渲染进程请求再打开一个窗口的请求
  */
@@ -145,12 +158,17 @@ ipcMain.on('create-window', () => {
     createWindow();
 });
 
+ipcMain.on('select-file-open-new-window', () => {
+    const newWindow = createWindow();
+    newWindow.once('show', () => {
+        newWindow.webContents.send('retransmission', 'select-file');
+    });
+});
 
 /**
  * 收到渲染进程请求弹出文件选择框然后将其打开
  */
 ipcMain.on('select-file', e => {
-    e.preventDefault();
     const targetWindow = BrowserWindow.fromWebContents(e.sender);
     dialog.showOpenDialog(targetWindow, { // 弹出文件打开对话框
         /**
@@ -181,6 +199,7 @@ ipcMain.on('select-file', e => {
  */
 ipcMain.on('save-markdown', (e, content) => {
     e.preventDefault();
+    const targetWindow = BrowserWindow.fromWebContents(e.sender);
     dialog.showSaveDialog(targetWindow, {
         // macos 不显示这个标题
         title: '保存Markdown',
@@ -207,6 +226,7 @@ ipcMain.on('save-markdown', (e, content) => {
  */
 ipcMain.on('save-html', (e, content) => {
     e.preventDefault();
+    const targetWindow = BrowserWindow.fromWebContents(e.sender);
     dialog.showSaveDialog(targetWindow, {
         // macos 不显示这个标题
         title: '保存HTML',
@@ -226,3 +246,5 @@ ipcMain.on('save-html', (e, content) => {
         });
     })
 });
+
+intervalSetMenu();
