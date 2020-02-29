@@ -78,6 +78,23 @@ button:disabled {
     border: 5px solid rgb(238, 252, 250);
     background-color: rgb(238, 252, 250);
     font-family: monospace;
+    resize: none; /* 禁止文本框的缩放 */
+}
+
+/*
+深蓝绿色指示用户拖拽的是一个支持的文件
+ */
+.raw-markdown.drag-over {
+    background-color: rgb(181, 220, 216);
+    border-color: rgb(75, 160, 151);
+}
+
+/*
+红色指示用户拖拽的是一个不支持的文件
+ */
+.raw-markdown.drag-error {
+    background-color: rgba(170, 57, 57, 1);
+    border-color: rgba(255, 170, 170, 1);
 }
 
 
